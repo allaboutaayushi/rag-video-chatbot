@@ -142,7 +142,16 @@ if st.button("🚀 Analyze", use_container_width=True, type="primary"):
             meta_b = get_metadata(url_b)
 
             if not (trans_a and meta_a and trans_b and meta_b):
-                st.error("❌ Could not extract both videos. Check URLs and captions.")
+                st.error("❌ Extraction failed")
+                if not vid_a or not meta_a:
+                    st.error(f"Video A: ID extraction: {'✓' if vid_a else '✗'}, Metadata: {'✓' if meta_a else '✗'}")
+                if not vid_b or not meta_b:
+                    st.error(f"Video B: ID extraction: {'✓' if vid_b else '✗'}, Metadata: {'✓' if meta_b else '✗'}")
+                if trans_a is None:
+                    st.error("Video A: No captions/transcript found")
+                if trans_b is None:
+                    st.error("Video B: No captions/transcript found")
+                st.info("💡 Try videos from: TED-Ed, Vsauce, MrBeast, Kurzgesagt (all have captions)")
             else:
                 st.session_state.videos = {
                     'A': {'meta': meta_a, 'trans': trans_a},
