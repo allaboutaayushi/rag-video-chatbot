@@ -167,8 +167,20 @@ Focus on: Opening hook, content style, pacing, call-to-action."""
             try:
                 from groq import Groq
                 client = Groq(api_key=groq_key)
+
+                # Get available models dynamically
+                models = client.models.list()
+                model_names = [m.id for m in models.data]
+
+                # Use first available model
+                if not model_names:
+                    st.error("❌ No models available")
+                    return None
+
+                selected_model = model_names[0]
+
                 response = client.chat.completions.create(
-                    model="llama-3.1-70b-versatile",
+                    model=selected_model,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.7,
                     max_tokens=300
@@ -177,10 +189,10 @@ Focus on: Opening hook, content style, pacing, call-to-action."""
 
             except Exception as groq_err:
                 st.error(f"❌ Error: {str(groq_err)}")
-                st.info("💡 Try:")
-                st.info("1. Get NEW key from: https://console.groq.com/keys")
-                st.info("2. Make sure it starts with 'gsk_'")
-                st.info("3. No extra spaces when pasting")
+                st.info("💡 Troubleshooting:")
+                st.info("1. Check your Groq key at: https://console.groq.com/keys")
+                st.info("2. Key should start with 'gsk_'")
+                st.info("3. No extra spaces or characters")
                 return None
 
         # Fall back to OpenAI
