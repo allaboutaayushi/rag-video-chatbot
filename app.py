@@ -40,12 +40,18 @@ def get_transcript(video_id):
     try:
         ts = YouTubeTranscriptApi.get_transcript(video_id)
         return " ".join([t['text'] for t in ts])
-    except:
+    except Exception as e:
+        st.write(f"Transcript error: {str(e)}")
         return None
 
 def get_metadata(url):
     try:
-        with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+        ydl_opts = {
+            'quiet': False,
+            'no_warnings': False,
+            'socket_timeout': 30
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
         views = info.get('view_count', 0) or 0
@@ -62,7 +68,8 @@ def get_metadata(url):
             'engagement_rate': engagement,
             'duration': info.get('duration', 0),
         }
-    except:
+    except Exception as e:
+        st.write(f"Metadata error: {str(e)}")
         return None
 
 def analyze_videos(meta_a, meta_b, trans_a, trans_b):
