@@ -10,10 +10,23 @@ st.title("📊 Video Engagement Analyzer")
 # Sidebar
 with st.sidebar:
     st.header("⚙️ Setup")
-    api_key = st.text_input("OpenAI API Key", type="password")
-    if api_key:
-        os.environ["OPENAI_API_KEY"] = api_key
-        st.success("✅ API Key set")
+    api_choice = st.radio("Choose API:", ["Google Gemini (FREE)", "OpenAI (Paid)"])
+
+    if api_choice == "Google Gemini (FREE)":
+        api_key = st.text_input("Google Gemini API Key", type="password",
+                               help="Get free at: ai.google.dev")
+        if api_key:
+            os.environ["GEMINI_API_KEY"] = api_key
+            st.success("✅ Gemini API Key set (FREE)")
+    else:
+        api_key = st.text_input("OpenAI API Key", type="password")
+        if api_key:
+            os.environ["OPENAI_API_KEY"] = api_key
+            st.success("✅ OpenAI API Key set")
+
+    st.divider()
+    st.caption("**Gemini:** Free tier, 60 requests/min")
+    st.caption("**OpenAI:** Paid, $0.01-0.03 per analysis")
 
 # Initialize session state
 if "videos" not in st.session_state:
@@ -105,14 +118,14 @@ def get_youtube_data(url, video_id):
     return metadata, transcript
 
 def analyze_comparison(meta_a, meta_b, trans_a, trans_b):
-    """Compare two videos using OpenAI"""
+    """Compare two videos using Gemini (FREE) or OpenAI"""
     try:
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            st.error("❌ OpenAI API key not set")
-            return None
+        gemini_key = os.environ.get("GEMINI_API_KEY")
+        openai_key = os.environ.get("OPENAI_API_KEY")
 
-        client = OpenAI(api_key=api_key)
+        if not gemini_key and not openai_key:
+            st.error("❌ No API key set. Choose Google Gemini (FREE) or OpenAI in sidebar")
+            return None
 
         engagement_a = meta_a.get('engagement_rate', 0)
         engagement_b = meta_b.get('engagement_rate', 0)
@@ -144,14 +157,24 @@ Transcript start: {trans_b[:500]}...
 
 Focus on: Opening hook, content style, pacing, call-to-action. Be specific with examples from the transcripts."""
 
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=500
-        )
+        # Use Gemini if available (FREE)
+        if gemini_key:
+            import google.generativeai as genai
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            return response.text
 
-        return response.choices[0].message.content
+        # Fall back to OpenAI
+        else:
+            client = OpenAI(api_key=openai_key)
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=500
+            )
+            return response.choices[0].message.content
 
     except Exception as e:
         st.error(f"❌ Analysis error: {str(e)}")
@@ -169,8 +192,8 @@ with col2:
     url_b = st.text_input("YouTube URL", key="b", placeholder="https://youtube.com/watch?v=...")
 
 if st.button("🚀 Analyze Videos", use_container_width=True, type="primary"):
-    if not os.environ.get("OPENAI_API_KEY"):
-        st.error("❌ Enter OpenAI API key in sidebar first")
+    if not (os.environ.get("OPENAI_API_KEY") or os.environ.get("GEMINI_API_KEY")):
+        st.error("❌ Enter API key in sidebar (use Gemini for FREE)")
     elif not url_a or not url_b:
         st.error("❌ Enter both URLs")
     else:
