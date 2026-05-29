@@ -3,6 +3,11 @@ import os
 from youtube_transcript_api import YouTubeTranscriptApi
 import yt_dlp
 import re
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_community.vectorstores import Chroma
+from langchain_community.chains.retrieval_qa.base import RetrievalQA
+from langchain.prompts import PromptTemplate
 
 st.set_page_config(page_title="RAG Video Chatbot", layout="wide")
 st.title("🎬 RAG Video Analyzer")
@@ -88,6 +93,7 @@ if st.button("🚀 Analyze", use_container_width=True, type="primary"):
                     from langchain_openai import OpenAIEmbeddings, ChatOpenAI
                     from langchain_community.vectorstores import Chroma
                     from langchain.chains import RetrievalQA
+from langchain_community.chains import RetrievalQA
                     from langchain.prompts import PromptTemplate
 
                     texts = [trans_a, trans_b]
