@@ -10,20 +10,19 @@ st.title("📊 Video Engagement Analyzer")
 # Sidebar
 with st.sidebar:
     st.header("⚙️ Setup")
-    api_choice = st.radio("Choose API:", ["Hugging Face (FREE)", "OpenAI (Paid)"])
+    api_choice = st.radio("Choose API:", ["Groq (FREE)", "OpenAI (Paid)"])
 
-    if api_choice == "Hugging Face (FREE)":
-        st.write("**Get HF Token (FREE, no card):**")
-        st.write("1. Go to: https://huggingface.co/join")
+    if api_choice == "Groq (FREE)":
+        st.write("**Get Groq API Key (FREE, no card):**")
+        st.write("1. Go to: https://console.groq.com/keys")
         st.write("2. Sign up (free)")
-        st.write("3. Go to Settings → Access Tokens")
-        st.write("4. Create new token")
-        st.write("5. Paste below")
+        st.write("3. Copy your API key")
+        st.write("4. Paste below")
 
-        api_key = st.text_input("Hugging Face Token", type="password", key="hf_input")
+        api_key = st.text_input("Groq API Key", type="password", key="groq_input")
         if api_key:
-            os.environ["HF_TOKEN"] = api_key
-            st.success("✅ Hugging Face Token set (FREE)")
+            os.environ["GROQ_API_KEY"] = api_key
+            st.success("✅ Groq API Key set (FREE)")
     else:
         st.write("**Get OpenAI API Key (Paid):**")
         st.write("1. Go to: https://platform.openai.com/api-keys")
@@ -37,7 +36,7 @@ with st.sidebar:
             st.success("✅ OpenAI API Key set")
 
     st.divider()
-    st.caption("🟢 **HF:** FREE, no card, unlimited")
+    st.caption("🟢 **Groq:** FREE, fast, no card needed")
     st.caption("🔵 **OpenAI:** Paid, $0.01-0.03 per analysis")
 
 # Initialize session state
@@ -130,13 +129,13 @@ def get_youtube_data(url, video_id):
     return metadata, transcript
 
 def analyze_comparison(meta_a, meta_b, trans_a, trans_b):
-    """Compare two videos using HuggingFace (FREE) or OpenAI"""
+    """Compare two videos using Groq (FREE) or OpenAI"""
     try:
-        hf_token = os.environ.get("HF_TOKEN")
+        groq_key = os.environ.get("GROQ_API_KEY")
         openai_key = os.environ.get("OPENAI_API_KEY")
 
-        if not hf_token and not openai_key:
-            st.error("❌ No API key set. Choose Hugging Face (FREE) or OpenAI in sidebar")
+        if not groq_key and not openai_key:
+            st.error("❌ No API key set. Choose Groq (FREE) or OpenAI in sidebar")
             return None
 
         engagement_a = meta_a.get('engagement_rate', 0)
@@ -163,36 +162,27 @@ Transcript: {trans_b[:400]}...
 
 Focus on: Opening hook, content style, pacing, call-to-action."""
 
-        # Use Hugging Face if available (FREE)
-        if hf_token:
+        # Use Groq if available (FREE)
+        if groq_key:
             try:
-                from huggingface_hub import InferenceClient
-                client = InferenceClient(api_key=hf_token)
-
-                # Use conversational endpoint (works with free tier)
-                response = client.text_generation(
-                    prompt,
-                    model="HuggingFaceH4/zephyr-7b-beta",
-                    max_new_tokens=300
+                from groq import Groq
+                client = Groq(api_key=groq_key)
+                response = client.chat.completions.create(
+                    model="mixtral-8x7b-32768",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    max_tokens=300
                 )
-                return response
+                return response.choices[0].message.content
 
-            except Exception as hf_err:
-                try:
-                    # Fallback: try with different model
-                    response = client.text_generation(
-                        prompt,
-                        model="meta-llama/Llama-2-7b-chat-hf",
-                        max_new_tokens=300
-                    )
-                    return response
-                except:
-                    if "invalid" in str(hf_err).lower() or "auth" in str(hf_err).lower():
-                        st.error("❌ Hugging Face token invalid")
-                        return None
-                    else:
-                        st.error(f"❌ HF error: {str(hf_err)}")
-                        return None
+            except Exception as groq_err:
+                if "invalid" in str(groq_err).lower() or "auth" in str(groq_err).lower():
+                    st.error("❌ Groq API key invalid")
+                    st.info("Get a new key from: https://console.groq.com/keys")
+                    return None
+                else:
+                    st.error(f"❌ Groq error: {str(groq_err)}")
+                    return None
 
         # Fall back to OpenAI
         else:
@@ -221,8 +211,8 @@ with col2:
     url_b = st.text_input("YouTube URL", key="b", placeholder="https://youtube.com/watch?v=...")
 
 if st.button("🚀 Analyze Videos", use_container_width=True, type="primary"):
-    if not (os.environ.get("OPENAI_API_KEY") or os.environ.get("HF_TOKEN")):
-        st.error("❌ Enter API key in sidebar (use Hugging Face for FREE)")
+    if not (os.environ.get("OPENAI_API_KEY") or os.environ.get("GROQ_API_KEY")):
+        st.error("❌ Enter API key in sidebar (use Groq for FREE)")
     elif not url_a or not url_b:
         st.error("❌ Enter both URLs")
     else:
