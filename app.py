@@ -176,13 +176,12 @@ Focus on: Opening hook, content style, pacing, call-to-action."""
                 return response.choices[0].message.content
 
             except Exception as groq_err:
-                if "invalid" in str(groq_err).lower() or "auth" in str(groq_err).lower():
-                    st.error("❌ Groq API key invalid")
-                    st.info("Get a new key from: https://console.groq.com/keys")
-                    return None
-                else:
-                    st.error(f"❌ Groq error: {str(groq_err)}")
-                    return None
+                st.error(f"❌ Error: {str(groq_err)}")
+                st.info("💡 Try:")
+                st.info("1. Get NEW key from: https://console.groq.com/keys")
+                st.info("2. Make sure it starts with 'gsk_'")
+                st.info("3. No extra spaces when pasting")
+                return None
 
         # Fall back to OpenAI
         else:
