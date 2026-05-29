@@ -10,25 +10,26 @@ st.title("📊 Video Engagement Analyzer")
 # Sidebar
 with st.sidebar:
     st.header("⚙️ Setup")
-    api_choice = st.radio("Choose API:", ["Google Gemini (FREE)", "OpenAI (Paid)"])
+    api_choice = st.radio("Choose API:", ["Hugging Face (FREE)", "OpenAI (Paid)"])
 
-    if api_choice == "Google Gemini (FREE)":
-        st.write("**Get Gemini API Key (FREE):**")
-        st.write("1. Go to: https://ai.google.dev")
-        st.write("2. Click 'Get API Key'")
-        st.write("3. Click 'Create API Key in new project'")
-        st.write("4. Copy the key")
+    if api_choice == "Hugging Face (FREE)":
+        st.write("**Get HF Token (FREE, no card):**")
+        st.write("1. Go to: https://huggingface.co/join")
+        st.write("2. Sign up (free)")
+        st.write("3. Go to Settings → Access Tokens")
+        st.write("4. Create new token")
         st.write("5. Paste below")
 
-        api_key = st.text_input("Gemini API Key", type="password", key="gemini_input")
+        api_key = st.text_input("Hugging Face Token", type="password", key="hf_input")
         if api_key:
-            os.environ["GEMINI_API_KEY"] = api_key
-            st.success("✅ Gemini API Key set (FREE)")
+            os.environ["HF_TOKEN"] = api_key
+            st.success("✅ Hugging Face Token set (FREE)")
     else:
         st.write("**Get OpenAI API Key (Paid):**")
         st.write("1. Go to: https://platform.openai.com/api-keys")
-        st.write("2. Create new key")
-        st.write("3. Paste below")
+        st.write("2. Add payment method")
+        st.write("3. Create new key")
+        st.write("4. Paste below")
 
         api_key = st.text_input("OpenAI API Key", type="password", key="openai_input")
         if api_key:
@@ -36,7 +37,7 @@ with st.sidebar:
             st.success("✅ OpenAI API Key set")
 
     st.divider()
-    st.caption("🟢 **Gemini:** FREE, 60 req/min, no card needed")
+    st.caption("🟢 **HF:** FREE, no card, unlimited")
     st.caption("🔵 **OpenAI:** Paid, $0.01-0.03 per analysis")
 
 # Initialize session state
@@ -129,13 +130,13 @@ def get_youtube_data(url, video_id):
     return metadata, transcript
 
 def analyze_comparison(meta_a, meta_b, trans_a, trans_b):
-    """Compare two videos using Gemini (FREE) or OpenAI"""
+    """Compare two videos using HuggingFace (FREE) or OpenAI"""
     try:
-        gemini_key = os.environ.get("GEMINI_API_KEY")
+        hf_token = os.environ.get("HF_TOKEN")
         openai_key = os.environ.get("OPENAI_API_KEY")
 
-        if not gemini_key and not openai_key:
-            st.error("❌ No API key set. Choose Google Gemini (FREE) or OpenAI in sidebar")
+        if not hf_token and not openai_key:
+            st.error("❌ No API key set. Choose Hugging Face (FREE) or OpenAI in sidebar")
             return None
 
         engagement_a = meta_a.get('engagement_rate', 0)
@@ -154,47 +155,33 @@ def analyze_comparison(meta_a, meta_b, trans_a, trans_b):
 
         prompt = f"""You are a video content expert. Compare these two YouTube videos and explain in 3-4 sentences WHY Video {higher} has {diff:.2f}% higher engagement ({higher_eng:.2f}% vs {lower_eng:.2f}%).
 
-VIDEO A:
-Title: {meta_a['title']}
-Engagement: {engagement_a:.2f}%
-Views: {meta_a['views']:,} | Likes: {meta_a['likes']:,} | Comments: {meta_a['comments']:,}
-Transcript start: {trans_a[:500]}...
+VIDEO A: {meta_a['title']} (Engagement: {engagement_a:.2f}%, Views: {meta_a['views']:,}, Likes: {meta_a['likes']:,}, Comments: {meta_a['comments']:,})
+Transcript: {trans_a[:400]}...
 
-VIDEO B:
-Title: {meta_b['title']}
-Engagement: {engagement_b:.2f}%
-Views: {meta_b['views']:,} | Likes: {meta_b['likes']:,} | Comments: {meta_b['comments']:,}
-Transcript start: {trans_b[:500]}...
+VIDEO B: {meta_b['title']} (Engagement: {engagement_b:.2f}%, Views: {meta_b['views']:,}, Likes: {meta_b['likes']:,}, Comments: {meta_b['comments']:,})
+Transcript: {trans_b[:400]}...
 
-Focus on: Opening hook, content style, pacing, call-to-action. Be specific with examples from the transcripts."""
+Focus on: Opening hook, content style, pacing, call-to-action."""
 
-        # Use Gemini if available (FREE)
-        if gemini_key:
+        # Use Hugging Face if available (FREE)
+        if hf_token:
             try:
-                import google.generativeai as genai
-                genai.configure(api_key=gemini_key)
+                from huggingface_hub import InferenceClient
+                client = InferenceClient(api_key=hf_token)
+                response = client.text_generation(
+                    prompt,
+                    model="mistralai/Mistral-7B-Instruct-v0.1",
+                    max_new_tokens=300
+                )
+                return response
 
-                # Try different model names
-                for model_name in ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-pro']:
-                    try:
-                        model = genai.GenerativeModel(model_name)
-                        response = model.generate_content(prompt)
-                        return response.text
-                    except:
-                        continue
-
-                st.error("❌ No compatible Gemini model found")
-                return None
-
-            except Exception as gemini_err:
-                if "API_KEY_INVALID" in str(gemini_err) or "not valid" in str(gemini_err):
-                    st.error("❌ Gemini API key is invalid")
-                    st.info("Make sure you:")
-                    st.info("✓ Copied the FULL key from ai.google.dev")
-                    st.info("✓ No extra spaces or characters")
+            except Exception as hf_err:
+                if "invalid" in str(hf_err).lower() or "auth" in str(hf_err).lower():
+                    st.error("❌ Hugging Face token invalid or expired")
+                    st.info("Get a new token from: https://huggingface.co/settings/tokens")
                     return None
                 else:
-                    st.error(f"❌ Gemini error: {str(gemini_err)}")
+                    st.error(f"❌ HF error: {str(hf_err)}")
                     return None
 
         # Fall back to OpenAI
@@ -224,8 +211,8 @@ with col2:
     url_b = st.text_input("YouTube URL", key="b", placeholder="https://youtube.com/watch?v=...")
 
 if st.button("🚀 Analyze Videos", use_container_width=True, type="primary"):
-    if not (os.environ.get("OPENAI_API_KEY") or os.environ.get("GEMINI_API_KEY")):
-        st.error("❌ Enter API key in sidebar (use Gemini for FREE)")
+    if not (os.environ.get("OPENAI_API_KEY") or os.environ.get("HF_TOKEN")):
+        st.error("❌ Enter API key in sidebar (use Hugging Face for FREE)")
     elif not url_a or not url_b:
         st.error("❌ Enter both URLs")
     else:
