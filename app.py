@@ -173,16 +173,25 @@ Focus on: Opening hook, content style, pacing, call-to-action. Be specific with 
             try:
                 import google.generativeai as genai
                 genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                response = model.generate_content(prompt)
-                return response.text
+
+                # Try different model names
+                for model_name in ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-pro']:
+                    try:
+                        model = genai.GenerativeModel(model_name)
+                        response = model.generate_content(prompt)
+                        return response.text
+                    except:
+                        continue
+
+                st.error("❌ No compatible Gemini model found")
+                return None
+
             except Exception as gemini_err:
                 if "API_KEY_INVALID" in str(gemini_err) or "not valid" in str(gemini_err):
                     st.error("❌ Gemini API key is invalid")
                     st.info("Make sure you:")
                     st.info("✓ Copied the FULL key from ai.google.dev")
                     st.info("✓ No extra spaces or characters")
-                    st.info("✓ Project has Generative AI API enabled")
                     return None
                 else:
                     st.error(f"❌ Gemini error: {str(gemini_err)}")
