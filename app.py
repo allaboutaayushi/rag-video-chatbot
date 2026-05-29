@@ -1,19 +1,13 @@
 import streamlit as st
 import os
 import re
-import yt_dlp
-import openai
+import json
 from openai import OpenAI
-
-try:
-    from youtube_transcript_api import YouTubeTranscriptApi
-except ImportError:
-    YouTubeTranscriptApi = None
 
 st.set_page_config(page_title="Video Engagement Analyzer", layout="wide")
 st.title("📊 Video Engagement Analyzer")
 
-# Sidebar - API Key
+# Sidebar
 with st.sidebar:
     st.header("⚙️ Setup")
     api_key = st.text_input("OpenAI API Key", type="password")
@@ -28,6 +22,7 @@ if "analysis" not in st.session_state:
     st.session_state.analysis = None
 
 def extract_youtube_id(url):
+    """Extract video ID from URL"""
     if not url:
         return None
     patterns = [
@@ -40,39 +35,22 @@ def extract_youtube_id(url):
             return match.group(1)
     return None
 
-def get_transcript(video_id):
+def get_youtube_data(url, video_id):
+    """Extract metadata and transcript from YouTube"""
     try:
-        if YouTubeTranscriptApi:
-            ts = YouTubeTranscriptApi.get_transcript(video_id)
-            return " ".join([t['text'] for t in ts])
-    except Exception as e:
-        pass
+        import yt_dlp
+    except ImportError:
+        st.error("yt-dlp not installed. Run: pip install yt-dlp")
+        return None, None
 
-    # Fallback: try to get transcript from yt-dlp
+    metadata = None
+    transcript = None
+
+    # Get metadata with yt-dlp
     try:
-        url = f"https://www.youtube.com/watch?v={video_id}"
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'writesubtitles': True,
-            'skip_unavailable_fragments': True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if 'subtitles' in info and info['subtitles']:
-                subs = info['subtitles'].get('en', [])
-                if subs:
-                    return " ".join([s['text'] for s in subs])
-    except:
-        pass
-
-    return None
-
-def get_metadata(url):
-    try:
-        ydl_opts = {
-            'quiet': False,
-            'no_warnings': False,
             'socket_timeout': 30,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -81,29 +59,60 @@ def get_metadata(url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
 
-        views = info.get('view_count', 0) or 0
-        likes = info.get('like_count', 0) or 0
-        comments = info.get('comment_count', 0) or 0
-        engagement = ((likes + comments) / views * 100) if views > 0 else 0
+            views = info.get('view_count', 0) or 0
+            likes = info.get('like_count', 0) or 0
+            comments = info.get('comment_count', 0) or 0
+            engagement = ((likes + comments) / views * 100) if views > 0 else 0
 
-        return {
-            'title': info.get('title', 'Unknown'),
-            'creator': info.get('uploader', 'Unknown'),
-            'views': views,
-            'likes': likes,
-            'comments': comments,
-            'engagement_rate': engagement,
-            'duration': info.get('duration', 0),
-        }
+            metadata = {
+                'title': info.get('title', 'Unknown'),
+                'creator': info.get('uploader', 'Unknown'),
+                'views': views,
+                'likes': likes,
+                'comments': comments,
+                'engagement_rate': engagement,
+                'duration': info.get('duration', 0),
+            }
+
+            # Try to get transcript from subtitles
+            if 'subtitles' in info and info['subtitles']:
+                for lang in ['en', 'en-US', 'en-GB']:
+                    if lang in info['subtitles']:
+                        subs = info['subtitles'][lang]
+                        transcript = " ".join([s.get('text', '') for s in subs])
+                        break
+
+            if not transcript and 'automatic_captions' in info and info['automatic_captions']:
+                for lang in ['en', 'en-US', 'en-GB']:
+                    if lang in info['automatic_captions']:
+                        subs = info['automatic_captions'][lang]
+                        transcript = " ".join([s.get('text', '') for s in subs])
+                        break
+
     except Exception as e:
-        st.error(f"Video unavailable: {str(e)}")
-        st.info("Try using a VPN or test locally. Some videos are blocked from cloud servers.")
-        return None
+        st.warning(f"Could not get YouTube data: {str(e)}")
+        return None, None
 
-def analyze_videos(meta_a, meta_b, trans_a, trans_b):
-    """Simple direct analysis with OpenAI"""
+    # Try youtube-transcript-api as fallback
+    if not transcript:
+        try:
+            from youtube_transcript_api import YouTubeTranscriptApi
+            ts = YouTubeTranscriptApi.get_transcript(video_id)
+            transcript = " ".join([t['text'] for t in ts])
+        except:
+            pass
+
+    return metadata, transcript
+
+def analyze_comparison(meta_a, meta_b, trans_a, trans_b):
+    """Compare two videos using OpenAI"""
     try:
-        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            st.error("❌ OpenAI API key not set")
+            return None
+
+        client = OpenAI(api_key=api_key)
 
         engagement_a = meta_a.get('engagement_rate', 0)
         engagement_b = meta_b.get('engagement_rate', 0)
@@ -111,98 +120,88 @@ def analyze_videos(meta_a, meta_b, trans_a, trans_b):
         if engagement_a > engagement_b:
             higher = 'A'
             diff = engagement_a - engagement_b
+            higher_eng = engagement_a
+            lower_eng = engagement_b
         else:
             higher = 'B'
             diff = engagement_b - engagement_a
+            higher_eng = engagement_b
+            lower_eng = engagement_a
 
-        prompt = f"""Compare these two YouTube videos and explain in 2-3 sentences WHY Video {higher} has {diff:.2f}% higher engagement.
+        prompt = f"""You are a video content expert. Compare these two YouTube videos and explain in 3-4 sentences WHY Video {higher} has {diff:.2f}% higher engagement ({higher_eng:.2f}% vs {lower_eng:.2f}%).
 
 VIDEO A:
-- Title: {meta_a['title']}
-- Views: {meta_a['views']:,}
-- Likes: {meta_a['likes']:,} | Comments: {meta_a['comments']:,}
-- Engagement: {engagement_a:.2f}%
-- First 300 chars: {trans_a[:300]}...
+Title: {meta_a['title']}
+Engagement: {engagement_a:.2f}%
+Views: {meta_a['views']:,} | Likes: {meta_a['likes']:,} | Comments: {meta_a['comments']:,}
+Transcript start: {trans_a[:500]}...
 
 VIDEO B:
-- Title: {meta_b['title']}
-- Views: {meta_b['views']:,}
-- Likes: {meta_b['likes']:,} | Comments: {meta_b['comments']:,}
-- Engagement: {engagement_b:.2f}%
-- First 300 chars: {trans_b[:300]}...
+Title: {meta_b['title']}
+Engagement: {engagement_b:.2f}%
+Views: {meta_b['views']:,} | Likes: {meta_b['likes']:,} | Comments: {meta_b['comments']:,}
+Transcript start: {trans_b[:500]}...
 
-Be concise. Focus on: hooks, content style, pacing differences."""
+Focus on: Opening hook, content style, pacing, call-to-action. Be specific with examples from the transcripts."""
 
         response = client.chat.completions.create(
             model="gpt-4-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
-            max_tokens=300
+            max_tokens=500
         )
 
         return response.choices[0].message.content
 
     except Exception as e:
-        return f"Error: {str(e)}"
+        st.error(f"❌ Analysis error: {str(e)}")
+        return None
 
-# Two columns for video input
+# Main UI
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Video A")
+    st.subheader("📹 Video A")
     url_a = st.text_input("YouTube URL", key="a", placeholder="https://youtube.com/watch?v=...")
 
 with col2:
-    st.subheader("Video B")
+    st.subheader("📹 Video B")
     url_b = st.text_input("YouTube URL", key="b", placeholder="https://youtube.com/watch?v=...")
 
-# Analyze button
-if st.button("🚀 Analyze", use_container_width=True, type="primary"):
+if st.button("🚀 Analyze Videos", use_container_width=True, type="primary"):
     if not os.environ.get("OPENAI_API_KEY"):
-        st.error("❌ Enter OpenAI API key in sidebar")
+        st.error("❌ Enter OpenAI API key in sidebar first")
     elif not url_a or not url_b:
         st.error("❌ Enter both URLs")
     else:
         st.session_state.analysis = None
 
-        with st.spinner("📥 Extracting videos..."):
-            # Video A
+        with st.spinner("📥 Extracting video data..."):
             vid_a = extract_youtube_id(url_a)
-            trans_a = get_transcript(vid_a) if vid_a else None
-            meta_a = get_metadata(url_a)
-
-            # Video B
             vid_b = extract_youtube_id(url_b)
-            trans_b = get_transcript(vid_b) if vid_b else None
-            meta_b = get_metadata(url_b)
 
-            if not (trans_a and meta_a and trans_b and meta_b):
-                st.error("❌ Extraction failed")
-                if not vid_a or not meta_a:
-                    st.error(f"Video A: ID extraction: {'✓' if vid_a else '✗'}, Metadata: {'✓' if meta_a else '✗'}")
-                if not vid_b or not meta_b:
-                    st.error(f"Video B: ID extraction: {'✓' if vid_b else '✗'}, Metadata: {'✓' if meta_b else '✗'}")
-                if trans_a is None:
-                    st.error("Video A: No captions/transcript found")
-                if trans_b is None:
-                    st.error("Video B: No captions/transcript found")
-                st.info("💡 Try videos from: TED-Ed, Vsauce, MrBeast, Kurzgesagt (all have captions)")
+            if not vid_a or not vid_b:
+                st.error("❌ Invalid YouTube URLs")
             else:
-                st.session_state.videos = {
-                    'A': {'meta': meta_a, 'trans': trans_a},
-                    'B': {'meta': meta_b, 'trans': trans_b}
-                }
+                meta_a, trans_a = get_youtube_data(url_a, vid_a)
+                meta_b, trans_b = get_youtube_data(url_b, vid_b)
 
-        # Analyze if extraction succeeded
-        if 'A' in st.session_state.videos and 'B' in st.session_state.videos:
-            with st.spinner("🤖 Analyzing..."):
-                analysis = analyze_videos(
-                    st.session_state.videos['A']['meta'],
-                    st.session_state.videos['B']['meta'],
-                    st.session_state.videos['A']['trans'],
-                    st.session_state.videos['B']['trans']
-                )
-                st.session_state.analysis = analysis
+                if not (meta_a and trans_a and meta_b and trans_b):
+                    st.error("❌ Could not extract both videos. Make sure:")
+                    st.info("✓ URLs are valid YouTube links")
+                    st.info("✓ Videos have captions/subtitles enabled")
+                    st.info("✓ Videos are publicly available")
+                    st.info("✓ Testing locally? If on cloud (Streamlit), some videos may be blocked")
+                else:
+                    st.session_state.videos = {
+                        'A': {'meta': meta_a, 'trans': trans_a},
+                        'B': {'meta': meta_b, 'trans': trans_b}
+                    }
+
+                    with st.spinner("🤖 Analyzing engagement differences..."):
+                        analysis = analyze_comparison(meta_a, meta_b, trans_a, trans_b)
+                        if analysis:
+                            st.session_state.analysis = analysis
 
 # Display results
 if 'A' in st.session_state.videos and 'B' in st.session_state.videos:
@@ -213,25 +212,27 @@ if 'A' in st.session_state.videos and 'B' in st.session_state.videos:
     with col1:
         meta_a = st.session_state.videos['A']['meta']
         st.subheader("📊 Video A")
-        st.metric("Title", meta_a['title'][:40] + "..." if len(meta_a['title']) > 40 else meta_a['title'])
-        st.metric("Creator", meta_a['creator'])
-        st.metric("Views", f"{meta_a['views']:,}")
-        st.metric("Likes", f"{meta_a['likes']:,}")
-        st.metric("Comments", f"{meta_a['comments']:,}")
         st.metric("Engagement Rate", f"{meta_a['engagement_rate']:.2f}%")
+        st.write(f"**Title:** {meta_a['title']}")
+        st.write(f"**Creator:** {meta_a['creator']}")
+        st.write(f"**Views:** {meta_a['views']:,}")
+        st.write(f"**Likes:** {meta_a['likes']:,}")
+        st.write(f"**Comments:** {meta_a['comments']:,}")
 
     with col2:
         meta_b = st.session_state.videos['B']['meta']
         st.subheader("📊 Video B")
-        st.metric("Title", meta_b['title'][:40] + "..." if len(meta_b['title']) > 40 else meta_b['title'])
-        st.metric("Creator", meta_b['creator'])
-        st.metric("Views", f"{meta_b['views']:,}")
-        st.metric("Likes", f"{meta_b['likes']:,}")
-        st.metric("Comments", f"{meta_b['comments']:,}")
         st.metric("Engagement Rate", f"{meta_b['engagement_rate']:.2f}%")
+        st.write(f"**Title:** {meta_b['title']}")
+        st.write(f"**Creator:** {meta_b['creator']}")
+        st.write(f"**Views:** {meta_b['views']:,}")
+        st.write(f"**Likes:** {meta_b['likes']:,}")
+        st.write(f"**Comments:** {meta_b['comments']:,}")
 
     st.divider()
 
-    st.subheader("🎯 Why One Performs Better")
     if st.session_state.analysis:
+        st.subheader("🎯 Why One Video Performs Better")
         st.info(st.session_state.analysis)
+    else:
+        st.warning("⚠️ Analysis not yet generated. Click 'Analyze Videos' above.")
