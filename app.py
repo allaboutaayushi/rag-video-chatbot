@@ -1,10 +1,14 @@
 import streamlit as st
 import os
 import re
-from youtube_transcript_api import YouTubeTranscriptApi
 import yt_dlp
 import openai
 from openai import OpenAI
+
+try:
+    from youtube_transcript_api import YouTubeTranscriptApi
+except ImportError:
+    YouTubeTranscriptApi = None
 
 st.set_page_config(page_title="Video Engagement Analyzer", layout="wide")
 st.title("📊 Video Engagement Analyzer")
@@ -38,18 +42,41 @@ def extract_youtube_id(url):
 
 def get_transcript(video_id):
     try:
-        ts = YouTubeTranscriptApi.get_transcript(video_id)
-        return " ".join([t['text'] for t in ts])
+        if YouTubeTranscriptApi:
+            ts = YouTubeTranscriptApi.get_transcript(video_id)
+            return " ".join([t['text'] for t in ts])
     except Exception as e:
-        st.write(f"Transcript error: {str(e)}")
-        return None
+        pass
+
+    # Fallback: try to get transcript from yt-dlp
+    try:
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'writesubtitles': True,
+            'skip_unavailable_fragments': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if 'subtitles' in info and info['subtitles']:
+                subs = info['subtitles'].get('en', [])
+                if subs:
+                    return " ".join([s['text'] for s in subs])
+    except:
+        pass
+
+    return None
 
 def get_metadata(url):
     try:
         ydl_opts = {
             'quiet': False,
             'no_warnings': False,
-            'socket_timeout': 30
+            'socket_timeout': 30,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -69,7 +96,8 @@ def get_metadata(url):
             'duration': info.get('duration', 0),
         }
     except Exception as e:
-        st.write(f"Metadata error: {str(e)}")
+        st.error(f"Video unavailable: {str(e)}")
+        st.info("Try using a VPN or test locally. Some videos are blocked from cloud servers.")
         return None
 
 def analyze_videos(meta_a, meta_b, trans_a, trans_b):
