@@ -168,7 +168,7 @@ Focus on: Opening hook, content style, pacing, call-to-action."""
                 from groq import Groq
                 client = Groq(api_key=groq_key)
                 response = client.chat.completions.create(
-                    model="mixtral-8x7b-32768",
+                    model="llama-3.1-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.7,
                     max_tokens=300
