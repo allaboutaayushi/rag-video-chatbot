@@ -159,13 +159,16 @@ Be SPECIFIC with examples from the transcripts. Reference exact phrases or strat
         response_text = ""
         placeholder = st.empty()
 
-        for chunk in llm.stream([HumanMessage(content=analysis_prompt)]):
-            if hasattr(chunk, 'content'):
-                response_text += chunk.content
-                placeholder.markdown(response_text + " ▌")
+        try:
+            for chunk in llm.stream([HumanMessage(content=analysis_prompt)]):
+                if hasattr(chunk, 'content'):
+                    response_text += chunk.content
+                    placeholder.markdown(response_text + " ▌")
+        except Exception as stream_err:
+            st.error(f"Streaming error: {str(stream_err)}")
+            return None
 
         placeholder.markdown(response_text)
-
         return response_text
 
     except Exception as e:
@@ -265,13 +268,16 @@ Reference specific videos and content from transcripts.""",
         response_text = ""
         placeholder = st.empty()
 
-        for chunk in llm.stream([HumanMessage(content=formatted_prompt)]):
-            if hasattr(chunk, 'content'):
-                response_text += chunk.content
-                placeholder.markdown(response_text + " ▌")
+        try:
+            for chunk in llm.stream([HumanMessage(content=formatted_prompt)]):
+                if hasattr(chunk, 'content'):
+                    response_text += chunk.content
+                    placeholder.markdown(response_text + " ▌")
+        except Exception as stream_err:
+            st.error(f"Streaming error: {str(stream_err)}")
+            return None, citations
 
         placeholder.markdown(response_text)
-
         return response_text, citations
 
     except Exception as e:
