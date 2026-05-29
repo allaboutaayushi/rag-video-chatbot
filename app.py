@@ -11,7 +11,10 @@ try:
     from langchain_openai import OpenAIEmbeddings, ChatOpenAI
     from langchain_community.vectorstores import Chroma
     from langchain.prompts import PromptTemplate
-    from langchain.schema import HumanMessage, AIMessage
+    try:
+        from langchain_core.messages import HumanMessage, AIMessage
+    except ImportError:
+        from langchain.schema import HumanMessage, AIMessage
     LANGCHAIN_OK = True
 except ImportError:
     LANGCHAIN_OK = False
