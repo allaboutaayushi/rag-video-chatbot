@@ -168,21 +168,31 @@ Focus on: Opening hook, content style, pacing, call-to-action."""
             try:
                 from huggingface_hub import InferenceClient
                 client = InferenceClient(api_key=hf_token)
+
+                # Use conversational endpoint (works with free tier)
                 response = client.text_generation(
                     prompt,
-                    model="mistralai/Mistral-7B-Instruct-v0.1",
+                    model="HuggingFaceH4/zephyr-7b-beta",
                     max_new_tokens=300
                 )
                 return response
 
             except Exception as hf_err:
-                if "invalid" in str(hf_err).lower() or "auth" in str(hf_err).lower():
-                    st.error("❌ Hugging Face token invalid or expired")
-                    st.info("Get a new token from: https://huggingface.co/settings/tokens")
-                    return None
-                else:
-                    st.error(f"❌ HF error: {str(hf_err)}")
-                    return None
+                try:
+                    # Fallback: try with different model
+                    response = client.text_generation(
+                        prompt,
+                        model="meta-llama/Llama-2-7b-chat-hf",
+                        max_new_tokens=300
+                    )
+                    return response
+                except:
+                    if "invalid" in str(hf_err).lower() or "auth" in str(hf_err).lower():
+                        st.error("❌ Hugging Face token invalid")
+                        return None
+                    else:
+                        st.error(f"❌ HF error: {str(hf_err)}")
+                        return None
 
         # Fall back to OpenAI
         else:
