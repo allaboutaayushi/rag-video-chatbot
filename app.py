@@ -13,20 +13,31 @@ with st.sidebar:
     api_choice = st.radio("Choose API:", ["Google Gemini (FREE)", "OpenAI (Paid)"])
 
     if api_choice == "Google Gemini (FREE)":
-        api_key = st.text_input("Google Gemini API Key", type="password",
-                               help="Get free at: ai.google.dev")
+        st.write("**Get Gemini API Key (FREE):**")
+        st.write("1. Go to: https://ai.google.dev")
+        st.write("2. Click 'Get API Key'")
+        st.write("3. Click 'Create API Key in new project'")
+        st.write("4. Copy the key")
+        st.write("5. Paste below")
+
+        api_key = st.text_input("Gemini API Key", type="password", key="gemini_input")
         if api_key:
             os.environ["GEMINI_API_KEY"] = api_key
             st.success("✅ Gemini API Key set (FREE)")
     else:
-        api_key = st.text_input("OpenAI API Key", type="password")
+        st.write("**Get OpenAI API Key (Paid):**")
+        st.write("1. Go to: https://platform.openai.com/api-keys")
+        st.write("2. Create new key")
+        st.write("3. Paste below")
+
+        api_key = st.text_input("OpenAI API Key", type="password", key="openai_input")
         if api_key:
             os.environ["OPENAI_API_KEY"] = api_key
             st.success("✅ OpenAI API Key set")
 
     st.divider()
-    st.caption("**Gemini:** Free tier, 60 requests/min")
-    st.caption("**OpenAI:** Paid, $0.01-0.03 per analysis")
+    st.caption("🟢 **Gemini:** FREE, 60 req/min, no card needed")
+    st.caption("🔵 **OpenAI:** Paid, $0.01-0.03 per analysis")
 
 # Initialize session state
 if "videos" not in st.session_state:
@@ -159,11 +170,23 @@ Focus on: Opening hook, content style, pacing, call-to-action. Be specific with 
 
         # Use Gemini if available (FREE)
         if gemini_key:
-            import google.generativeai as genai
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(prompt)
-            return response.text
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=gemini_key)
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content(prompt)
+                return response.text
+            except Exception as gemini_err:
+                if "API_KEY_INVALID" in str(gemini_err) or "not valid" in str(gemini_err):
+                    st.error("❌ Gemini API key is invalid")
+                    st.info("Make sure you:")
+                    st.info("✓ Copied the FULL key from ai.google.dev")
+                    st.info("✓ No extra spaces or characters")
+                    st.info("✓ Project has Generative AI API enabled")
+                    return None
+                else:
+                    st.error(f"❌ Gemini error: {str(gemini_err)}")
+                    return None
 
         # Fall back to OpenAI
         else:
